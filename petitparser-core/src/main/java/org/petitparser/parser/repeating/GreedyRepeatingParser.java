@@ -1,6 +1,7 @@
 package org.petitparser.parser.repeating;
 
 import org.petitparser.context.Context;
+import org.petitparser.context.Failure;
 import org.petitparser.context.Result;
 import org.petitparser.parser.Parser;
 
@@ -21,67 +22,56 @@ public class GreedyRepeatingParser extends LimitedRepeatingParser {
 
   @Override
   public Result parseOn(Context context) {
-    Context current = context;
     List<Object> elements = new ArrayList<>();
-    while (elements.size() < min) {
-      Result result = delegate.parseOn(current);
-      if (result.isFailure()) {
-        return result;
-      }
-      elements.add(result.get());
-      current = result;
-    }
-    List<Context> contexts = new ArrayList<>();
-    contexts.add(current);
-    while (max == UNBOUNDED || elements.size() < max) {
-      Result result = delegate.parseOn(current);
-      if (result.isFailure()) {
-        break;
-      }
-      elements.add(result.get());
-      contexts.add(current = result);
-    }
-    while (true) {
-      Result limiter = limit.parseOn(contexts.get(contexts.size() - 1));
-      if (limiter.isSuccess()) {
-        return contexts.get(contexts.size() - 1).success(elements);
-      }
-      if (elements.isEmpty()) {
-        return limiter;
-      }
-      contexts.remove(contexts.size() - 1);
-      elements.remove(elements.size() - 1);
-      if (contexts.isEmpty()) {
-        return limiter;
-      }
-    }
+    Result[] sink = new Result[1];
+    int position = transitionGreedy(
+        context.getBuffer(), context.getPosition(), sink, elements);
+    return position < 0 ? sink[0] : context.success(elements, position);
   }
 
   @Override
   public int fastParseOn(String buffer, int position) {
+    return transitionGreedy(buffer, position, null, null);
+  }
+
+  /**
+   * Shared transition semantics of the greedy repeater: consumes the
+   * delegate as often as possible, then backtracks one repetition at a time
+   * until the {@code limit} parser succeeds. In slow mode ({@code sink} and
+   * {@code elements} not {@code null}) collects the parsed values and
+   * leaves the offending {@link Failure} (of the delegate during the
+   * minimum phase, or of the limit while backtracking) in {@code sink[0]}.
+   */
+  private int transitionGreedy(
+      String buffer, int position, Result[] sink, List<Object> elements) {
     int count = 0;
-    int current = position;
     while (count < min) {
-      int result = delegate.fastParseOn(buffer, current);
+      int result = transition(delegate, buffer, position, sink);
       if (result < 0) {
         return -1;
       }
-      current = result;
+      if (elements != null) {
+        elements.add(sink[0].get());
+      }
+      position = result;
       count++;
     }
     List<Integer> positions = new ArrayList<>();
-    positions.add(current);
+    positions.add(position);
     while (max == UNBOUNDED || count < max) {
-      int result = delegate.fastParseOn(buffer, current);
+      int result = transition(delegate, buffer, position, sink);
       if (result < 0) {
         break;
       }
-      positions.add(current = result);
+      if (elements != null) {
+        elements.add(sink[0].get());
+      }
+      positions.add(position = result);
       count++;
     }
     while (true) {
-      int limiter =
-          limit.fastParseOn(buffer, positions.get(positions.size() - 1));
+      int limiter = transition(
+          limit, buffer, positions.get(positions.size() - 1), sink);
       if (limiter >= 0) {
         return positions.get(positions.size() - 1);
       }
@@ -90,6 +80,9 @@ public class GreedyRepeatingParser extends LimitedRepeatingParser {
       }
       positions.remove(positions.size() - 1);
       count--;
+      if (elements != null) {
+        elements.remove(elements.size() - 1);
+      }
       if (positions.isEmpty()) {
         return -1;
       }
@@ -101,4 +94,3 @@ public class GreedyRepeatingParser extends LimitedRepeatingParser {
     return new GreedyRepeatingParser(delegate, limit, min, max);
   }
 }
-

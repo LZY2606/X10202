@@ -16,17 +16,15 @@ public class AndParser extends DelegateParser {
 
   @Override
   public Result parseOn(Context context) {
-    Result result = delegate.parseOn(context);
-    if (result.isSuccess()) {
-      return context.success(result.get());
-    } else {
-      return result;
-    }
+    Result[] sink = new Result[1];
+    int position =
+        transition(delegate, context.getBuffer(), context.getPosition(), sink);
+    return position < 0 ? sink[0] : context.success(sink[0].get());
   }
 
   @Override
   public int fastParseOn(String buffer, int position) {
-    int result = delegate.fastParseOn(buffer, position);
+    int result = transition(delegate, buffer, position, null);
     return result < 0 ? -1 : position;
   }
 

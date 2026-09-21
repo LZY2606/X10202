@@ -84,6 +84,41 @@ public abstract class Parser {
   }
 
   /**
+   * Internal transition primitive shared by the combinator parsers.
+   *
+   * <p>This method encodes the single semantic definition of a child parse
+   * step that both {@link #parseOn(Context)} and {@link
+   * #fastParseOn(String, int)} of the combinators are built upon:
+   *
+   * <ul>
+   * <li>On success the returned value is the position right after the
+   * consumed input (a non-negative number).</li>
+   * <li>On failure the returned value is {@code -1}.</li>
+   * <li>Whether production side-effects are executed is decided by the
+   * delegate itself: in slow mode ({@code sink != null}) the full {@link
+   * #parseOn(Context)} is run; in fast mode ({@code sink == null}) the
+   * allocation free {@link #fastParseOn(String, int)} is run, which
+   * delegates like {@link org.petitparser.parser.actions.ActionParser}
+   * route back to the slow mode if side-effects have to be preserved.</li>
+   * </ul>
+   *
+   * <p>If {@code sink} is not {@code null}, the {@link Result} of the child
+   * parse (success or failure) is stored in {@code sink[0]}, giving the
+   * caller access to the parsed value and the failure object without
+   * re-parsing. Combinators pass {@code null} on the hot path to avoid any
+   * object allocation.
+   */
+  protected static int transition(
+      Parser parser, String buffer, int position, Result[] sink) {
+    if (sink == null) {
+      return parser.fastParseOn(buffer, position);
+    }
+    Result result = parser.parseOn(new Context(buffer, position));
+    sink[0] = result;
+    return result.isSuccess() ? result.getPosition() : -1;
+  }
+
+  /**
    * Returns a list of all successful overlapping parses of the {@code input}.
    */
   @SuppressWarnings("unchecked")

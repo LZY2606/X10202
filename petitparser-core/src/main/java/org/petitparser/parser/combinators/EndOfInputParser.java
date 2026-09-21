@@ -19,13 +19,22 @@ public class EndOfInputParser extends Parser {
 
   @Override
   public Result parseOn(Context context) {
-    return context.getPosition() < context.getBuffer().length() ?
-        context.failure(message) : context.success(null);
+    return isEndOfInput(context.getBuffer(), context.getPosition()) ?
+        context.success(null) : context.failure(message);
   }
 
   @Override
   public int fastParseOn(String buffer, int position) {
-    return position < buffer.length() ? -1 : position;
+    return isEndOfInput(buffer, position) ? position : -1;
+  }
+
+  /**
+   * Shared boundary condition of both parse modes: the end of input is
+   * reached when the {@code position} is at or past the end of the {@code
+   * buffer}.
+   */
+  private boolean isEndOfInput(String buffer, int position) {
+    return position >= buffer.length();
   }
 
   @Override

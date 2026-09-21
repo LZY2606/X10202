@@ -20,17 +20,15 @@ public class OptionalParser extends DelegateParser {
 
   @Override
   public Result parseOn(Context context) {
-    Result result = delegate.parseOn(context);
-    if (result.isSuccess()) {
-      return result;
-    } else {
-      return context.success(otherwise);
-    }
+    Result[] sink = new Result[1];
+    int position =
+        transition(delegate, context.getBuffer(), context.getPosition(), sink);
+    return position < 0 ? context.success(otherwise) : sink[0];
   }
 
   @Override
   public int fastParseOn(String buffer, int position) {
-    int result = delegate.fastParseOn(buffer, position);
+    int result = transition(delegate, buffer, position, null);
     return result < 0 ? position : result;
   }
 

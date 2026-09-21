@@ -1,6 +1,7 @@
 package org.petitparser.parser.repeating;
 
 import org.petitparser.context.Context;
+import org.petitparser.context.Failure;
 import org.petitparser.context.Result;
 import org.petitparser.parser.Parser;
 
@@ -19,48 +20,53 @@ public class PossessiveRepeatingParser extends RepeatingParser {
 
   @Override
   public Result parseOn(Context context) {
-    Context current = context;
     List<Object> elements = new ArrayList<>();
-    while (elements.size() < min) {
-      Result result = delegate.parseOn(current);
-      if (result.isFailure()) {
-        return result;
-      }
-      elements.add(result.get());
-      current = result;
-    }
-    while (max == UNBOUNDED || elements.size() < max) {
-      Result result = delegate.parseOn(current);
-      if (result.isFailure()) {
-        return current.success(elements);
-      }
-      elements.add(result.get());
-      current = result;
-    }
-    return current.success(elements);
+    Result[] sink = new Result[1];
+    int position = transitionPossessive(
+        context.getBuffer(), context.getPosition(), sink, elements);
+    return position < 0 ? sink[0] : context.success(elements, position);
   }
 
   @Override
   public int fastParseOn(String buffer, int position) {
+    return transitionPossessive(buffer, position, null, null);
+  }
+
+  /**
+   * Shared transition semantics of the possessive repeater: consumes the
+   * delegate greedily between {@code min} and {@code max} times. Fails with
+   * {@code -1} if the minimum cannot be reached, otherwise stops at the
+   * first delegate failure or at {@code max} repetitions. In slow mode
+   * ({@code sink} and {@code elements} not {@code null}) collects the
+   * parsed values and leaves the offending {@link Failure} in
+   * {@code sink[0]}.
+   */
+  private int transitionPossessive(
+      String buffer, int position, Result[] sink, List<Object> elements) {
     int count = 0;
-    int current = position;
     while (count < min) {
-      int result = delegate.fastParseOn(buffer, current);
+      int result = transition(delegate, buffer, position, sink);
       if (result < 0) {
         return result;
       }
-      current = result;
+      if (elements != null) {
+        elements.add(sink[0].get());
+      }
+      position = result;
       count++;
     }
     while (max == UNBOUNDED || count < max) {
-      int result = delegate.fastParseOn(buffer, current);
+      int result = transition(delegate, buffer, position, sink);
       if (result < 0) {
-        return current;
+        return position;
       }
-      current = result;
+      if (elements != null) {
+        elements.add(sink[0].get());
+      }
+      position = result;
       count++;
     }
-    return current;
+    return position;
   }
 
   @Override

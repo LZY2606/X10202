@@ -46,6 +46,13 @@ public class FlattenParser extends DelegateParser {
   }
 
   @Override
+  public int fastParseOn(String buffer, int position) {
+    // The flattened result spans exactly the input consumed by the
+    // delegate, so the transition boundary is the one of the delegate.
+    return delegate.fastParseOn(buffer, position);
+  }
+
+  @Override
   public FlattenParser copy() {
     return new FlattenParser(delegate, message);
   }
