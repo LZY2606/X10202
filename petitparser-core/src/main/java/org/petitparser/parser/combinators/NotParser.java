@@ -3,6 +3,7 @@ package org.petitparser.parser.combinators;
 import org.petitparser.context.Context;
 import org.petitparser.context.Result;
 import org.petitparser.parser.Parser;
+import org.petitparser.parser.TransitionHandler;
 
 import java.util.Objects;
 
@@ -21,18 +22,20 @@ public class NotParser extends DelegateParser {
 
   @Override
   public Result parseOn(Context context) {
-    Result result = delegate.parseOn(context);
-    if (result.isFailure()) {
-      return context.success(null);
-    } else {
-      return context.failure(message);
-    }
+    TransitionHandler.Collecting handler = new TransitionHandler.Collecting();
+    int position = transition(context.getBuffer(), context.getPosition(),
+        handler);
+    return position < 0 ? context.failure(message) : context.success(null);
   }
 
   @Override
   public int fastParseOn(String buffer, int position) {
-    int result = delegate.fastParseOn(buffer, position);
-    return result < 0 ? position : -1;
+    return transition(buffer, position, TransitionHandler.FAST);
+  }
+
+  private int transition(String buffer, int position,
+      TransitionHandler handler) {
+    return handler.move(delegate, buffer, position) < 0 ? position : -1;
   }
 
   @Override

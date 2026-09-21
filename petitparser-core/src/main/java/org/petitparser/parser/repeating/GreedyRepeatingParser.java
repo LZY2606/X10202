@@ -3,6 +3,7 @@ package org.petitparser.parser.repeating;
 import org.petitparser.context.Context;
 import org.petitparser.context.Result;
 import org.petitparser.parser.Parser;
+import org.petitparser.parser.TransitionHandler;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -21,67 +22,45 @@ public class GreedyRepeatingParser extends LimitedRepeatingParser {
 
   @Override
   public Result parseOn(Context context) {
-    Context current = context;
-    List<Object> elements = new ArrayList<>();
-    while (elements.size() < min) {
-      Result result = delegate.parseOn(current);
-      if (result.isFailure()) {
-        return result;
-      }
-      elements.add(result.get());
-      current = result;
-    }
-    List<Context> contexts = new ArrayList<>();
-    contexts.add(current);
-    while (max == UNBOUNDED || elements.size() < max) {
-      Result result = delegate.parseOn(current);
-      if (result.isFailure()) {
-        break;
-      }
-      elements.add(result.get());
-      contexts.add(current = result);
-    }
-    while (true) {
-      Result limiter = limit.parseOn(contexts.get(contexts.size() - 1));
-      if (limiter.isSuccess()) {
-        return contexts.get(contexts.size() - 1).success(elements);
-      }
-      if (elements.isEmpty()) {
-        return limiter;
-      }
-      contexts.remove(contexts.size() - 1);
-      elements.remove(elements.size() - 1);
-      if (contexts.isEmpty()) {
-        return limiter;
-      }
-    }
+    TransitionHandler.Collecting handler = new TransitionHandler.Collecting();
+    int position = transition(context.getBuffer(), context.getPosition(),
+        handler);
+    return position < 0 ? handler.last :
+        context.success(handler.values, position);
   }
 
   @Override
   public int fastParseOn(String buffer, int position) {
+    return transition(buffer, position, TransitionHandler.FAST);
+  }
+
+  private int transition(String buffer, int position,
+      TransitionHandler handler) {
     int count = 0;
     int current = position;
     while (count < min) {
-      int result = delegate.fastParseOn(buffer, current);
+      int result = handler.move(delegate, buffer, current);
       if (result < 0) {
         return -1;
       }
+      handler.push();
       current = result;
       count++;
     }
     List<Integer> positions = new ArrayList<>();
     positions.add(current);
     while (max == UNBOUNDED || count < max) {
-      int result = delegate.fastParseOn(buffer, current);
+      int result = handler.move(delegate, buffer, current);
       if (result < 0) {
         break;
       }
+      handler.push();
       positions.add(current = result);
       count++;
     }
     while (true) {
-      int limiter =
-          limit.fastParseOn(buffer, positions.get(positions.size() - 1));
+      int limiter = handler.move(limit, buffer,
+          positions.get(positions.size() - 1));
       if (limiter >= 0) {
         return positions.get(positions.size() - 1);
       }
@@ -89,6 +68,7 @@ public class GreedyRepeatingParser extends LimitedRepeatingParser {
         return -1;
       }
       positions.remove(positions.size() - 1);
+      handler.pop();
       count--;
       if (positions.isEmpty()) {
         return -1;
@@ -101,4 +81,3 @@ public class GreedyRepeatingParser extends LimitedRepeatingParser {
     return new GreedyRepeatingParser(delegate, limit, min, max);
   }
 }
-

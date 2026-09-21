@@ -1,11 +1,10 @@
 package org.petitparser.parser.repeating;
 
 import org.petitparser.context.Context;
+import org.petitparser.context.Failure;
 import org.petitparser.context.Result;
 import org.petitparser.parser.Parser;
-
-import java.util.ArrayList;
-import java.util.List;
+import org.petitparser.parser.TransitionHandler;
 
 /**
  * A lazy repeating parser, commonly seen in regular expression implementations.
@@ -20,61 +19,68 @@ public class LazyRepeatingParser extends LimitedRepeatingParser {
 
   @Override
   public Result parseOn(Context context) {
-    Context current = context;
-    List<Object> elements = new ArrayList<>();
-    while (elements.size() < min) {
-      Result result = delegate.parseOn(current);
-      if (result.isFailure()) {
-        return result;
-      }
-      elements.add(result.get());
-      current = result;
-    }
-    while (true) {
-      Result limiter = limit.parseOn(current);
-      if (limiter.isSuccess()) {
-        return current.success(elements);
-      } else {
-        if (max != UNBOUNDED && elements.size() >= max) {
-          return limiter;
-        }
-        Result result = delegate.parseOn(current);
-        if (result.isFailure()) {
-          return limiter;
-        }
-        elements.add(result.get());
-        current = result;
-      }
-    }
+    LazyHandler handler = new LazyHandler();
+    int position = transition(context.getBuffer(), context.getPosition(),
+        handler);
+    return position < 0 ? handler.failure() :
+        context.success(handler.values, position);
   }
 
   @Override
   public int fastParseOn(String buffer, int position) {
+    return transition(buffer, position, TransitionHandler.FAST);
+  }
+
+  private int transition(String buffer, int position,
+      TransitionHandler handler) {
     int count = 0;
     int current = position;
     while (count < min) {
-      int result = delegate.fastParseOn(buffer, current);
+      int result = handler.move(delegate, buffer, current);
       if (result < 0) {
         return -1;
       }
+      handler.push();
       current = result;
       count++;
     }
     while (true) {
-      int limiter = limit.fastParseOn(buffer, current);
+      int limiter = handler.move(limit, buffer, current);
       if (limiter >= 0) {
         return current;
       } else {
         if (max != UNBOUNDED && count >= max) {
           return -1;
         }
-        int result = delegate.fastParseOn(buffer, current);
+        int result = handler.move(delegate, buffer, current);
         if (result < 0) {
           return -1;
         }
+        handler.push();
         current = result;
         count++;
       }
+    }
+  }
+
+  private class LazyHandler extends TransitionHandler.Collecting {
+    Failure limitFailure;
+
+    @Override
+    public int move(Parser parser, String buffer, int position) {
+      int result = super.move(parser, buffer, position);
+      if (result < 0 && parser == limit) {
+        limitFailure = (Failure) last;
+      }
+      return result;
+    }
+
+    /**
+     * Failures of the main loop report the limit failure, failures of the
+     * initial minimum loop report the delegate failure.
+     */
+    Result failure() {
+      return limitFailure != null ? limitFailure : last;
     }
   }
 

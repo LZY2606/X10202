@@ -61,6 +61,13 @@ public abstract class Parser {
    * current {@code position} in that buffer. It returns a new (positive)
    * position in case of a successful parse, or `-1` in case of a failure.
    *
+   * <p>The contract with {@link #parseOn(Context)} is: for the same buffer
+   * and position, this method returns a non-negative position exactly when
+   * {@code parseOn} succeeds, and that position equals the position of the
+   * resulting success. Parsers with side-effects (see {@link
+   * #mapWithSideEffects(Function)}) are exempt from the optimization and
+   * fall back to the full parse.
+   *
    * <p>Subclasses don't necessarily have to override this method, since it is
    * emulated using its slower brother.
    */

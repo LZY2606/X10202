@@ -4,6 +4,7 @@ import org.petitparser.context.Context;
 import org.petitparser.context.Failure;
 import org.petitparser.context.Result;
 import org.petitparser.parser.Parser;
+import org.petitparser.parser.TransitionHandler;
 import org.petitparser.utils.FailureJoiner;
 
 import java.util.Arrays;
@@ -29,29 +30,40 @@ public class ChoiceParser extends ListParser {
 
   @Override
   public Result parseOn(Context context) {
-    Failure failure = null;
-    for (Parser parser : parsers) {
-      Result result = parser.parseOn(context);
-      if (result.isFailure()) {
-        failure = failure == null ? (Failure) result :
-            failureJoiner.apply(failure, (Failure) result);
-      } else {
-        return result;
-      }
-    }
-    return failure;
+    ChoiceHandler handler = new ChoiceHandler();
+    int position = transition(context.getBuffer(), context.getPosition(),
+        handler);
+    return position < 0 ? handler.failure : handler.last;
   }
 
   @Override
   public int fastParseOn(String buffer, int position) {
-    int result = -1;
+    return transition(buffer, position, TransitionHandler.FAST);
+  }
+
+  private int transition(String buffer, int position,
+      TransitionHandler handler) {
     for (Parser parser : parsers) {
-      result = parser.fastParseOn(buffer, position);
+      int result = handler.move(parser, buffer, position);
       if (result >= 0) {
         return result;
       }
     }
-    return result;
+    return -1;
+  }
+
+  private class ChoiceHandler extends TransitionHandler.Collecting {
+    Failure failure;
+
+    @Override
+    public int move(Parser parser, String buffer, int position) {
+      int result = super.move(parser, buffer, position);
+      if (result < 0) {
+        failure = failure == null ? (Failure) last :
+            failureJoiner.apply(failure, (Failure) last);
+      }
+      return result;
+    }
   }
 
   @Override
