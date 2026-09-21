@@ -3,6 +3,9 @@ package org.petitparser.parser.combinators;
 import org.petitparser.context.Context;
 import org.petitparser.context.Result;
 import org.petitparser.parser.Parser;
+import org.petitparser.parser.mode.ParseMode;
+import org.petitparser.parser.mode.PositionMode;
+import org.petitparser.parser.mode.ResultMode;
 
 import java.util.Objects;
 
@@ -19,13 +22,25 @@ public class EndOfInputParser extends Parser {
 
   @Override
   public Result parseOn(Context context) {
-    return context.getPosition() < context.getBuffer().length() ?
-        context.failure(message) : context.success(null);
+    ResultMode mode = new ResultMode(context);
+    transition(mode);
+    return mode.toResult();
   }
 
   @Override
   public int fastParseOn(String buffer, int position) {
-    return position < buffer.length() ? -1 : position;
+    PositionMode mode = new PositionMode(buffer, position);
+    transition(mode);
+    return mode.result();
+  }
+
+  /** Shared transition: succeed only at the end of the buffer. */
+  private void transition(ParseMode mode) {
+    if (mode.atEnd()) {
+      mode.succeedValue(null);
+    } else {
+      mode.fail(message);
+    }
   }
 
   @Override

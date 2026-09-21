@@ -3,9 +3,9 @@ package org.petitparser.parser.repeating;
 import org.petitparser.context.Context;
 import org.petitparser.context.Result;
 import org.petitparser.parser.Parser;
-
-import java.util.ArrayList;
-import java.util.List;
+import org.petitparser.parser.mode.ParseMode;
+import org.petitparser.parser.mode.PositionMode;
+import org.petitparser.parser.mode.ResultMode;
 
 /**
  * A greedy parser that repeatedly parses between 'min' and 'max' instances of
@@ -19,48 +19,40 @@ public class PossessiveRepeatingParser extends RepeatingParser {
 
   @Override
   public Result parseOn(Context context) {
-    Context current = context;
-    List<Object> elements = new ArrayList<>();
-    while (elements.size() < min) {
-      Result result = delegate.parseOn(current);
-      if (result.isFailure()) {
-        return result;
-      }
-      elements.add(result.get());
-      current = result;
-    }
-    while (max == UNBOUNDED || elements.size() < max) {
-      Result result = delegate.parseOn(current);
-      if (result.isFailure()) {
-        return current.success(elements);
-      }
-      elements.add(result.get());
-      current = result;
-    }
-    return current.success(elements);
+    ResultMode mode = new ResultMode(context);
+    transition(mode);
+    return mode.toResult();
   }
 
   @Override
   public int fastParseOn(String buffer, int position) {
+    PositionMode mode = new PositionMode(buffer, position);
+    transition(mode);
+    return mode.result();
+  }
+
+  /**
+   * Shared transition: at least {@code min} successes are mandatory; up to
+   * {@code max} further successes are consumed greedily without looking
+   * ahead, and a failure after the minimum ends the repetition successfully.
+   */
+  private void transition(ParseMode mode) {
     int count = 0;
-    int current = position;
     while (count < min) {
-      int result = delegate.fastParseOn(buffer, current);
-      if (result < 0) {
-        return result;
+      if (!mode.accept(delegate)) {
+        return;
       }
-      current = result;
+      mode.push();
       count++;
     }
     while (max == UNBOUNDED || count < max) {
-      int result = delegate.fastParseOn(buffer, current);
-      if (result < 0) {
-        return current;
+      if (!mode.accept(delegate)) {
+        break;
       }
-      current = result;
+      mode.push();
       count++;
     }
-    return current;
+    mode.succeedList();
   }
 
   @Override

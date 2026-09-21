@@ -3,9 +3,11 @@ package org.petitparser.parser.repeating;
 import org.petitparser.context.Context;
 import org.petitparser.context.Result;
 import org.petitparser.parser.Parser;
+import org.petitparser.parser.mode.ParseMode;
+import org.petitparser.parser.mode.PositionMode;
+import org.petitparser.parser.mode.ResultMode;
 
 import java.util.ArrayList;
-import java.util.List;
 
 /**
  * A greedy repeating parser, commonly seen in regular expression
@@ -21,77 +23,60 @@ public class GreedyRepeatingParser extends LimitedRepeatingParser {
 
   @Override
   public Result parseOn(Context context) {
-    Context current = context;
-    List<Object> elements = new ArrayList<>();
-    while (elements.size() < min) {
-      Result result = delegate.parseOn(current);
-      if (result.isFailure()) {
-        return result;
-      }
-      elements.add(result.get());
-      current = result;
-    }
-    List<Context> contexts = new ArrayList<>();
-    contexts.add(current);
-    while (max == UNBOUNDED || elements.size() < max) {
-      Result result = delegate.parseOn(current);
-      if (result.isFailure()) {
-        break;
-      }
-      elements.add(result.get());
-      contexts.add(current = result);
-    }
-    while (true) {
-      Result limiter = limit.parseOn(contexts.get(contexts.size() - 1));
-      if (limiter.isSuccess()) {
-        return contexts.get(contexts.size() - 1).success(elements);
-      }
-      if (elements.isEmpty()) {
-        return limiter;
-      }
-      contexts.remove(contexts.size() - 1);
-      elements.remove(elements.size() - 1);
-      if (contexts.isEmpty()) {
-        return limiter;
-      }
-    }
+    ResultMode mode = new ResultMode(context);
+    transition(mode);
+    return mode.toResult();
   }
 
   @Override
   public int fastParseOn(String buffer, int position) {
+    PositionMode mode = new PositionMode(buffer, position);
+    transition(mode);
+    return mode.result();
+  }
+
+  /**
+   * Shared transition: satisfy the minimum, consume as much as possible up
+   * to {@code max}, then backtrack in reverse order until the limit matches;
+   * the limit is never consumed. A minimum failure propagates; if the limit
+   * cannot match anywhere, its failure at the earliest probed position is
+   * reported.
+   */
+  private void transition(ParseMode mode) {
     int count = 0;
-    int current = position;
     while (count < min) {
-      int result = delegate.fastParseOn(buffer, current);
-      if (result < 0) {
-        return -1;
+      if (!mode.accept(delegate)) {
+        return;
       }
-      current = result;
+      mode.push();
       count++;
     }
-    List<Integer> positions = new ArrayList<>();
-    positions.add(current);
+    List<Integer> marks = new ArrayList<>();
+    marks.add(mode.position());
     while (max == UNBOUNDED || count < max) {
-      int result = delegate.fastParseOn(buffer, current);
-      if (result < 0) {
+      if (!mode.accept(delegate)) {
         break;
       }
-      positions.add(current = result);
+      mode.push();
+      marks.add(mode.position());
       count++;
     }
     while (true) {
-      int limiter =
-          limit.fastParseOn(buffer, positions.get(positions.size() - 1));
-      if (limiter >= 0) {
-        return positions.get(positions.size() - 1);
+      int mark = marks.get(marks.size() - 1);
+      mode.reset(mark);
+      if (mode.accept(limit)) {
+        mode.reset(mark);
+        mode.succeedList();
+        return;
       }
       if (count == 0) {
-        return -1;
+        return;
       }
-      positions.remove(positions.size() - 1);
+      marks.remove(marks.size() - 1);
+      mode.pop();
       count--;
-      if (positions.isEmpty()) {
-        return -1;
+      if (marks.isEmpty()) {
+        return;
       }
     }
   }
@@ -101,4 +86,3 @@ public class GreedyRepeatingParser extends LimitedRepeatingParser {
     return new GreedyRepeatingParser(delegate, limit, min, max);
   }
 }
-

@@ -3,6 +3,9 @@ package org.petitparser.parser.combinators;
 import org.petitparser.context.Context;
 import org.petitparser.context.Result;
 import org.petitparser.parser.Parser;
+import org.petitparser.parser.mode.ParseMode;
+import org.petitparser.parser.mode.PositionMode;
+import org.petitparser.parser.mode.ResultMode;
 
 /**
  * The and-predicate, a parser that succeeds whenever its delegate does, but
@@ -16,18 +19,27 @@ public class AndParser extends DelegateParser {
 
   @Override
   public Result parseOn(Context context) {
-    Result result = delegate.parseOn(context);
-    if (result.isSuccess()) {
-      return context.success(result.get());
-    } else {
-      return result;
-    }
+    ResultMode mode = new ResultMode(context);
+    transition(mode);
+    return mode.toResult();
   }
 
   @Override
   public int fastParseOn(String buffer, int position) {
-    int result = delegate.fastParseOn(buffer, position);
-    return result < 0 ? -1 : position;
+    PositionMode mode = new PositionMode(buffer, position);
+    transition(mode);
+    return mode.result();
+  }
+
+  /**
+   * Shared transition: succeed exactly when the delegate succeeds, but never
+   * consume input and report the delegate value; propagate its failure.
+   */
+  private void transition(ParseMode mode) {
+    int mark = mode.position();
+    if (mode.accept(delegate)) {
+      mode.reset(mark);
+    }
   }
 
   @Override

@@ -3,10 +3,11 @@ package org.petitparser.parser.combinators;
 import org.petitparser.context.Context;
 import org.petitparser.context.Result;
 import org.petitparser.parser.Parser;
+import org.petitparser.parser.mode.ParseMode;
+import org.petitparser.parser.mode.PositionMode;
+import org.petitparser.parser.mode.ResultMode;
 
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 
 /**
  * A parser that parses a sequence of parsers.
@@ -19,28 +20,32 @@ public class SequenceParser extends ListParser {
 
   @Override
   public Result parseOn(Context context) {
-    Context current = context;
-    List<Object> elements = new ArrayList<>(parsers.length);
-    for (Parser parser : parsers) {
-      Result result = parser.parseOn(current);
-      if (result.isFailure()) {
-        return result;
-      }
-      elements.add(result.get());
-      current = result;
-    }
-    return current.success(elements);
+    ResultMode mode = new ResultMode(context);
+    transition(mode);
+    return mode.toResult();
   }
 
   @Override
   public int fastParseOn(String buffer, int position) {
+    PositionMode mode = new PositionMode(buffer, position);
+    transition(mode);
+    return mode.result();
+  }
+
+  /**
+   * Shared transition of {@link #parseOn} and {@link #fastParseOn}: every
+   * child must succeed at the position reached by its predecessor; the first
+   * failure ends the transition and the collected child values form the
+   * result.
+   */
+  private void transition(ParseMode mode) {
     for (Parser parser : parsers) {
-      position = parser.fastParseOn(buffer, position);
-      if (position < 0) {
-        return position;
+      if (!mode.accept(parser)) {
+        return;
       }
+      mode.push();
     }
-    return position;
+    mode.succeedList();
   }
 
   @Override

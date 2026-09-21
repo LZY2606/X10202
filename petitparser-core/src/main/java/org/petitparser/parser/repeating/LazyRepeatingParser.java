@@ -3,9 +3,9 @@ package org.petitparser.parser.repeating;
 import org.petitparser.context.Context;
 import org.petitparser.context.Result;
 import org.petitparser.parser.Parser;
-
-import java.util.ArrayList;
-import java.util.List;
+import org.petitparser.parser.mode.ParseMode;
+import org.petitparser.parser.mode.PositionMode;
+import org.petitparser.parser.mode.ResultMode;
 
 /**
  * A lazy repeating parser, commonly seen in regular expression implementations.
@@ -20,61 +20,51 @@ public class LazyRepeatingParser extends LimitedRepeatingParser {
 
   @Override
   public Result parseOn(Context context) {
-    Context current = context;
-    List<Object> elements = new ArrayList<>();
-    while (elements.size() < min) {
-      Result result = delegate.parseOn(current);
-      if (result.isFailure()) {
-        return result;
-      }
-      elements.add(result.get());
-      current = result;
-    }
-    while (true) {
-      Result limiter = limit.parseOn(current);
-      if (limiter.isSuccess()) {
-        return current.success(elements);
-      } else {
-        if (max != UNBOUNDED && elements.size() >= max) {
-          return limiter;
-        }
-        Result result = delegate.parseOn(current);
-        if (result.isFailure()) {
-          return limiter;
-        }
-        elements.add(result.get());
-        current = result;
-      }
-    }
+    ResultMode mode = new ResultMode(context);
+    transition(mode);
+    return mode.toResult();
   }
 
   @Override
   public int fastParseOn(String buffer, int position) {
+    PositionMode mode = new PositionMode(buffer, position);
+    transition(mode);
+    return mode.result();
+  }
+
+  /**
+   * Shared transition: satisfy the minimum, then alternate between probing
+   * the limit (never consumed) at the current position and consuming one
+   * delegate. If the limit fails at {@code max}, or the delegate fails after
+   * the limit failed, the reported failure is the limit failure.
+   */
+  private void transition(ParseMode mode) {
     int count = 0;
-    int current = position;
     while (count < min) {
-      int result = delegate.fastParseOn(buffer, current);
-      if (result < 0) {
-        return -1;
+      if (!mode.accept(delegate)) {
+        return;
       }
-      current = result;
+      mode.push();
       count++;
     }
     while (true) {
-      int limiter = limit.fastParseOn(buffer, current);
-      if (limiter >= 0) {
-        return current;
-      } else {
-        if (max != UNBOUNDED && count >= max) {
-          return -1;
-        }
-        int result = delegate.fastParseOn(buffer, current);
-        if (result < 0) {
-          return -1;
-        }
-        current = result;
-        count++;
+      int mark = mode.position();
+      if (mode.accept(limit)) {
+        mode.reset(mark);
+        mode.succeedList();
+        return;
       }
+      Object limitFailure = mode.failure();
+      if (max != UNBOUNDED && count >= max) {
+        mode.failWith(limitFailure);
+        return;
+      }
+      if (!mode.accept(delegate)) {
+        mode.failWith(limitFailure);
+        return;
+      }
+      mode.push();
+      count++;
     }
   }
 

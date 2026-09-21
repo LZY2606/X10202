@@ -4,6 +4,9 @@ import org.petitparser.context.Context;
 import org.petitparser.context.Failure;
 import org.petitparser.context.Result;
 import org.petitparser.parser.Parser;
+import org.petitparser.parser.mode.ParseMode;
+import org.petitparser.parser.mode.PositionMode;
+import org.petitparser.parser.mode.ResultMode;
 import org.petitparser.utils.FailureJoiner;
 
 import java.util.Arrays;
@@ -29,29 +32,31 @@ public class ChoiceParser extends ListParser {
 
   @Override
   public Result parseOn(Context context) {
-    Failure failure = null;
-    for (Parser parser : parsers) {
-      Result result = parser.parseOn(context);
-      if (result.isFailure()) {
-        failure = failure == null ? (Failure) result :
-            failureJoiner.apply(failure, (Failure) result);
-      } else {
-        return result;
-      }
-    }
-    return failure;
+    ResultMode mode = new ResultMode(context);
+    transition(mode);
+    return mode.toResult();
   }
 
   @Override
   public int fastParseOn(String buffer, int position) {
-    int result = -1;
+    PositionMode mode = new PositionMode(buffer, position);
+    transition(mode);
+    return mode.result();
+  }
+
+  /**
+   * Shared transition: alternatives are tried in order at the very same
+   * position; the first success ends the transition, otherwise all failures
+   * are joined.
+   */
+  private void transition(ParseMode mode) {
     for (Parser parser : parsers) {
-      result = parser.fastParseOn(buffer, position);
-      if (result >= 0) {
-        return result;
+      if (mode.accept(parser)) {
+        return;
       }
+      mode.joinFailure(failureJoiner);
     }
-    return result;
+    mode.failJoined();
   }
 
   @Override

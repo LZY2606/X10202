@@ -3,6 +3,9 @@ package org.petitparser.parser.combinators;
 import org.petitparser.context.Context;
 import org.petitparser.context.Result;
 import org.petitparser.parser.Parser;
+import org.petitparser.parser.mode.ParseMode;
+import org.petitparser.parser.mode.PositionMode;
+import org.petitparser.parser.mode.ResultMode;
 
 import java.util.Objects;
 
@@ -20,18 +23,26 @@ public class OptionalParser extends DelegateParser {
 
   @Override
   public Result parseOn(Context context) {
-    Result result = delegate.parseOn(context);
-    if (result.isSuccess()) {
-      return result;
-    } else {
-      return context.success(otherwise);
-    }
+    ResultMode mode = new ResultMode(context);
+    transition(mode);
+    return mode.toResult();
   }
 
   @Override
   public int fastParseOn(String buffer, int position) {
-    int result = delegate.fastParseOn(buffer, position);
-    return result < 0 ? position : result;
+    PositionMode mode = new PositionMode(buffer, position);
+    transition(mode);
+    return mode.result();
+  }
+
+  /**
+   * Shared transition: report the delegate success, or a zero-width success
+   * carrying the {@code otherwise} value.
+   */
+  private void transition(ParseMode mode) {
+    if (!mode.accept(delegate)) {
+      mode.succeedValue(otherwise);
+    }
   }
 
   @Override
