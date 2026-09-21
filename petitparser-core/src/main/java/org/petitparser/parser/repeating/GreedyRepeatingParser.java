@@ -21,30 +21,42 @@ public class GreedyRepeatingParser extends LimitedRepeatingParser {
 
   @Override
   public Result parseOn(Context context) {
-    Context current = context;
+    Context[] current = {context};
     List<Object> elements = new ArrayList<>();
-    while (elements.size() < min) {
-      Result result = delegate.parseOn(current);
-      if (result.isFailure()) {
-        return result;
+
+    // Shared mandatory prefix.
+    Result failure = repeatMandatory(min, () -> {
+      Result result = delegate.parseOn(current[0]);
+      if (result.isSuccess()) {
+        elements.add(result.get());
+        current[0] = result;
       }
-      elements.add(result.get());
-      current = result;
+      return result;
+    });
+    if (failure != null) {
+      return failure;
     }
+
+    // Over-consume as far as possible, remembering every context reached.
     List<Context> contexts = new ArrayList<>();
-    contexts.add(current);
-    while (max == UNBOUNDED || elements.size() < max) {
-      Result result = delegate.parseOn(current);
+    contexts.add(current[0]);
+    while (canRepeat(elements.size(), max)) {
+      Result result = delegate.parseOn(current[0]);
       if (result.isFailure()) {
         break;
       }
       elements.add(result.get());
-      contexts.add(current = result);
+      current[0] = result;
+      contexts.add(result);
     }
+
+    // Shared backtracking boundary computation: walk the recorded positions
+    // backwards until the limit matches.
     while (true) {
-      Result limiter = limit.parseOn(contexts.get(contexts.size() - 1));
+      Context candidate = contexts.get(contexts.size() - 1);
+      Result limiter = limit.parseOn(candidate);
       if (limiter.isSuccess()) {
-        return contexts.get(contexts.size() - 1).success(elements);
+        return candidate.success(elements);
       }
       if (elements.isEmpty()) {
         return limiter;
@@ -59,8 +71,12 @@ public class GreedyRepeatingParser extends LimitedRepeatingParser {
 
   @Override
   public int fastParseOn(String buffer, int position) {
-    int count = 0;
+    // Fast counterpart of the slow state machine above (mandatory prefix,
+    // over-consume, then backtrack to the limit). Plain locals and a primitive
+    // int stack keep recognition free of captured lambdas, boxing and context
+    // or result allocations.
     int current = position;
+    int count = 0;
     while (count < min) {
       int result = delegate.fastParseOn(buffer, current);
       if (result < 0) {
@@ -69,26 +85,28 @@ public class GreedyRepeatingParser extends LimitedRepeatingParser {
       current = result;
       count++;
     }
-    List<Integer> positions = new ArrayList<>();
-    positions.add(current);
-    while (max == UNBOUNDED || count < max) {
+
+    IntStack positions = new IntStack();
+    positions.push(current);
+    while (canRepeat(count, max)) {
       int result = delegate.fastParseOn(buffer, current);
       if (result < 0) {
         break;
       }
-      positions.add(current = result);
+      current = result;
+      positions.push(result);
       count++;
     }
+
     while (true) {
-      int limiter =
-          limit.fastParseOn(buffer, positions.get(positions.size() - 1));
-      if (limiter >= 0) {
-        return positions.get(positions.size() - 1);
+      int candidate = positions.top();
+      if (limit.fastParseOn(buffer, candidate) >= 0) {
+        return candidate;
       }
       if (count == 0) {
         return -1;
       }
-      positions.remove(positions.size() - 1);
+      positions.pop();
       count--;
       if (positions.isEmpty()) {
         return -1;
@@ -100,5 +118,36 @@ public class GreedyRepeatingParser extends LimitedRepeatingParser {
   public GreedyRepeatingParser copy() {
     return new GreedyRepeatingParser(delegate, limit, min, max);
   }
-}
 
+  /**
+   * Minimal growable stack of primitive positions used by the fast-path
+   * backtracking. Backed by a plain {@code int[]} to avoid the boxing and
+   * per-element entry allocation of a {@code List<Integer>}.
+   */
+  private static final class IntStack {
+
+    private int[] data = new int[8];
+    private int size;
+
+    void push(int value) {
+      if (size == data.length) {
+        int[] grown = new int[data.length * 2];
+        System.arraycopy(data, 0, grown, 0, size);
+        data = grown;
+      }
+      data[size++] = value;
+    }
+
+    int pop() {
+      return data[--size];
+    }
+
+    int top() {
+      return data[size - 1];
+    }
+
+    boolean isEmpty() {
+      return size == 0;
+    }
+  }
+}

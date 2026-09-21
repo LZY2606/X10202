@@ -44,7 +44,12 @@ public class ActionParser<T, R> extends DelegateParser {
 
   @Override
   public int fastParseOn(String buffer, int position) {
-    // If we know to have side-effects, we have to fall back to the slow mode.
+    // Whether the action is allowed to run is decided in exactly one place:
+    // a pure transformation only rewrites the value and therefore never needs
+    // to execute on the recognition path, so the delegate's fast transition is
+    // reused without any allocation. An action with side effects must be
+    // observed, so recognition deliberately falls back to the slow parseOn
+    // machinery (which runs the function exactly once per attempt).
     return hasSideEffects ? super.fastParseOn(buffer, position) :
         delegate.fastParseOn(buffer, position);
   }

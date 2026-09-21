@@ -21,18 +21,13 @@ public class NotParser extends DelegateParser {
 
   @Override
   public Result parseOn(Context context) {
-    Result result = delegate.parseOn(context);
-    if (result.isFailure()) {
-      return context.success(null);
-    } else {
-      return context.failure(message);
-    }
+    return Transitions.not(context, delegate.parseOn(context), message);
   }
 
   @Override
   public int fastParseOn(String buffer, int position) {
-    int result = delegate.fastParseOn(buffer, position);
-    return result < 0 ? position : -1;
+    return Transitions.not(position,
+        delegate.fastParseOn(buffer, position));
   }
 
   @Override

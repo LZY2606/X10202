@@ -19,40 +19,51 @@ public class PossessiveRepeatingParser extends RepeatingParser {
 
   @Override
   public Result parseOn(Context context) {
-    Context current = context;
+    Context[] current = {context};
     List<Object> elements = new ArrayList<>();
-    while (elements.size() < min) {
-      Result result = delegate.parseOn(current);
+
+    // Mandatory repetitions: a failure aborts the whole parse.
+    Result failure = repeatMandatory(min, () -> {
+      Result result = delegate.parseOn(current[0]);
+      if (result.isSuccess()) {
+        elements.add(result.get());
+        current[0] = result;
+      }
+      return result;
+    });
+    if (failure != null) {
+      return failure;
+    }
+
+    // Optional repetitions: a failure terminates the repetition successfully.
+    while (canRepeat(elements.size(), max)) {
+      Result result = delegate.parseOn(current[0]);
       if (result.isFailure()) {
-        return result;
+        return current[0].success(elements);
       }
       elements.add(result.get());
-      current = result;
+      current[0] = result;
     }
-    while (max == UNBOUNDED || elements.size() < max) {
-      Result result = delegate.parseOn(current);
-      if (result.isFailure()) {
-        return current.success(elements);
-      }
-      elements.add(result.get());
-      current = result;
-    }
-    return current.success(elements);
+    return current[0].success(elements);
   }
 
   @Override
   public int fastParseOn(String buffer, int position) {
-    int count = 0;
+    // Fast counterpart of the slow state machine above: mandatory prefix that
+    // aborts on failure, then an optional tail that ends successfully on
+    // failure. The loop is inline and threads plain locals so recognition
+    // captures nothing and allocates nothing.
     int current = position;
+    int count = 0;
     while (count < min) {
       int result = delegate.fastParseOn(buffer, current);
       if (result < 0) {
-        return result;
+        return -1;
       }
       current = result;
       count++;
     }
-    while (max == UNBOUNDED || count < max) {
+    while (canRepeat(count, max)) {
       int result = delegate.fastParseOn(buffer, current);
       if (result < 0) {
         return current;

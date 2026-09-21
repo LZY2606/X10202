@@ -20,38 +20,46 @@ public class LazyRepeatingParser extends LimitedRepeatingParser {
 
   @Override
   public Result parseOn(Context context) {
-    Context current = context;
+    Context[] current = {context};
     List<Object> elements = new ArrayList<>();
-    while (elements.size() < min) {
-      Result result = delegate.parseOn(current);
+
+    // Shared mandatory prefix.
+    Result failure = repeatMandatory(min, () -> {
+      Result result = delegate.parseOn(current[0]);
+      if (result.isSuccess()) {
+        elements.add(result.get());
+        current[0] = result;
+      }
+      return result;
+    });
+    if (failure != null) {
+      return failure;
+    }
+
+    // Probe the limit as early as possible, otherwise consume one more.
+    while (true) {
+      Result limiter = limit.parseOn(current[0]);
+      if (limiter.isSuccess()) {
+        return current[0].success(elements);
+      }
+      if (!canRepeat(elements.size(), max)) {
+        return limiter;
+      }
+      Result result = delegate.parseOn(current[0]);
       if (result.isFailure()) {
-        return result;
+        return limiter;
       }
       elements.add(result.get());
-      current = result;
-    }
-    while (true) {
-      Result limiter = limit.parseOn(current);
-      if (limiter.isSuccess()) {
-        return current.success(elements);
-      } else {
-        if (max != UNBOUNDED && elements.size() >= max) {
-          return limiter;
-        }
-        Result result = delegate.parseOn(current);
-        if (result.isFailure()) {
-          return limiter;
-        }
-        elements.add(result.get());
-        current = result;
-      }
+      current[0] = result;
     }
   }
 
   @Override
   public int fastParseOn(String buffer, int position) {
-    int count = 0;
+    // Fast counterpart of the slow state machine above, threading plain locals
+    // so recognition captures nothing and allocates nothing.
     int current = position;
+    int count = 0;
     while (count < min) {
       int result = delegate.fastParseOn(buffer, current);
       if (result < 0) {
@@ -64,17 +72,16 @@ public class LazyRepeatingParser extends LimitedRepeatingParser {
       int limiter = limit.fastParseOn(buffer, current);
       if (limiter >= 0) {
         return current;
-      } else {
-        if (max != UNBOUNDED && count >= max) {
-          return -1;
-        }
-        int result = delegate.fastParseOn(buffer, current);
-        if (result < 0) {
-          return -1;
-        }
-        current = result;
-        count++;
       }
+      if (!canRepeat(count, max)) {
+        return -1;
+      }
+      int result = delegate.fastParseOn(buffer, current);
+      if (result < 0) {
+        return -1;
+      }
+      current = result;
+      count++;
     }
   }
 

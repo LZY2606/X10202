@@ -19,25 +19,32 @@ public class SequenceParser extends ListParser {
 
   @Override
   public Result parseOn(Context context) {
-    Context current = context;
+    // The ordered, fail-fast transition in Transitions is the single source
+    // of truth for sequencing and rollback; the slow path additionally threads
+    // contexts, collects values and builds the final success.
     List<Object> elements = new ArrayList<>(parsers.length);
-    for (Parser parser : parsers) {
-      Result result = parser.parseOn(current);
-      if (result.isFailure()) {
-        return result;
-      }
-      elements.add(result.get());
-      current = result;
-    }
-    return current.success(elements);
+    Context[] current = {context};
+    Result failure = Transitions.sequence(parsers.length, context,
+        (index, currentContext) -> {
+          Result result = parsers[index].parseOn(currentContext);
+          if (result.isSuccess()) {
+            elements.add(result.get());
+            current[0] = result;
+          }
+          return result;
+        });
+    return failure != null ? failure : current[0].success(elements);
   }
 
   @Override
   public int fastParseOn(String buffer, int position) {
-    for (Parser parser : parsers) {
-      position = parser.fastParseOn(buffer, position);
+    // Fast counterpart of the shared ordered, fail-fast sequence transition
+    // in Transitions#sequence. Only the integer position is threaded; the loop
+    // is inline so the recognition path captures nothing and allocates nothing.
+    for (int i = 0; i < parsers.length - 1; i++) {
+      position = parsers[i].fastParseOn(buffer, position);
       if (position < 0) {
-        return position;
+        return -1;
       }
     }
     return position;

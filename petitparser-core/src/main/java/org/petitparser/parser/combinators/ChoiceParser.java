@@ -29,29 +29,26 @@ public class ChoiceParser extends ListParser {
 
   @Override
   public Result parseOn(Context context) {
-    Failure failure = null;
-    for (Parser parser : parsers) {
-      Result result = parser.parseOn(context);
-      if (result.isFailure()) {
-        failure = failure == null ? (Failure) result :
-            failureJoiner.apply(failure, (Failure) result);
-      } else {
-        return result;
-      }
-    }
-    return failure;
+    // First-success semantics and the restart position are shared with the
+    // fast path; only the slow path folds the collected failures together.
+    return Transitions.choice(parsers.length,
+        index -> parsers[index].parseOn(context),
+        failureJoiner::apply);
   }
 
   @Override
   public int fastParseOn(String buffer, int position) {
-    int result = -1;
+    // Fast counterpart of the shared ordered-choice transition in
+    // Transitions#choice. Every alternative is retried from the same start
+    // position and the first non-negative result wins; the loop is kept inline
+    // so the recognition path captures nothing and allocates nothing.
     for (Parser parser : parsers) {
-      result = parser.fastParseOn(buffer, position);
+      int result = parser.fastParseOn(buffer, position);
       if (result >= 0) {
         return result;
       }
     }
-    return result;
+    return -1;
   }
 
   @Override

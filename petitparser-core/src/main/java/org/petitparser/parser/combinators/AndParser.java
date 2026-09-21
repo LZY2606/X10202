@@ -16,18 +16,13 @@ public class AndParser extends DelegateParser {
 
   @Override
   public Result parseOn(Context context) {
-    Result result = delegate.parseOn(context);
-    if (result.isSuccess()) {
-      return context.success(result.get());
-    } else {
-      return result;
-    }
+    return Transitions.and(context, delegate.parseOn(context));
   }
 
   @Override
   public int fastParseOn(String buffer, int position) {
-    int result = delegate.fastParseOn(buffer, position);
-    return result < 0 ? -1 : position;
+    return Transitions.and(position,
+        delegate.fastParseOn(buffer, position));
   }
 
   @Override
