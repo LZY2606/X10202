@@ -34,10 +34,12 @@ public class SequenceParser extends ListParser {
 
   @Override
   public int fastParseOn(String buffer, int position) {
+    // Same ordered children and the same first-failure short circuit as
+    // parseOn, but threaded on the integer position with no allocation.
     for (Parser parser : parsers) {
       position = parser.fastParseOn(buffer, position);
       if (position < 0) {
-        return position;
+        return -1;
       }
     }
     return position;

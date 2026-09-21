@@ -21,7 +21,7 @@ public class PossessiveRepeatingParser extends RepeatingParser {
   public Result parseOn(Context context) {
     Context current = context;
     List<Object> elements = new ArrayList<>();
-    while (elements.size() < min) {
+    while (needsMandatoryRepetition(elements.size())) {
       Result result = delegate.parseOn(current);
       if (result.isFailure()) {
         return result;
@@ -29,7 +29,7 @@ public class PossessiveRepeatingParser extends RepeatingParser {
       elements.add(result.get());
       current = result;
     }
-    while (max == UNBOUNDED || elements.size() < max) {
+    while (allowsOptionalRepetition(elements.size())) {
       Result result = delegate.parseOn(current);
       if (result.isFailure()) {
         return current.success(elements);
@@ -43,24 +43,25 @@ public class PossessiveRepeatingParser extends RepeatingParser {
   @Override
   public int fastParseOn(String buffer, int position) {
     int count = 0;
-    int current = position;
-    while (count < min) {
-      int result = delegate.fastParseOn(buffer, current);
-      if (result < 0) {
-        return result;
+    // Mandatory repetitions: a failure here fails the whole parser.
+    while (needsMandatoryRepetition(count)) {
+      int next = delegate.fastParseOn(buffer, position);
+      if (next < 0) {
+        return -1;
       }
-      current = result;
+      position = next;
       count++;
     }
-    while (max == UNBOUNDED || count < max) {
-      int result = delegate.fastParseOn(buffer, current);
-      if (result < 0) {
-        return current;
+    // Optional repetitions: a failure here completes a successful parse.
+    while (allowsOptionalRepetition(count)) {
+      int next = delegate.fastParseOn(buffer, position);
+      if (next < 0) {
+        return position;
       }
-      current = result;
+      position = next;
       count++;
     }
-    return current;
+    return position;
   }
 
   @Override

@@ -48,10 +48,18 @@ public class TrimmingParser extends DelegateParser {
 
   @Override
   public int fastParseOn(String buffer, int position) {
-    int result = delegate.fastParseOn(buffer, consume(left, buffer, position));
+    // Same three-stage transition as parseOn, expressed entirely on the
+    // integer position and allocating nothing.
+    position = consume(left, buffer, position);
+    int result = delegate.fastParseOn(buffer, position);
     return result < 0 ? result : consume(right, buffer, result);
   }
 
+  /**
+   * Shared boundary computation: repeatedly apply {@code parser} while it
+   * keeps advancing, and return the fixed point position. Used by both the
+   * slow and the fast path to trim the left and right surroundings.
+   */
   private int consume(Parser parser, String buffer, int position) {
     for (; ; ) {
       int result = parser.fastParseOn(buffer, position);

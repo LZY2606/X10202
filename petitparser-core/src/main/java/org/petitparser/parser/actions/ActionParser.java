@@ -36,7 +36,9 @@ public class ActionParser<T, R> extends DelegateParser {
   public Result parseOn(Context context) {
     Result result = delegate.parseOn(context);
     if (result.isSuccess()) {
-      return result.success(function.apply(result.get()));
+      // The slow path always applies the action, both for its value and for
+      // its (possible) side effects.
+      return result.success(applyAction(result.get()));
     } else {
       return result;
     }
@@ -44,9 +46,28 @@ public class ActionParser<T, R> extends DelegateParser {
 
   @Override
   public int fastParseOn(String buffer, int position) {
-    // If we know to have side-effects, we have to fall back to the slow mode.
-    return hasSideEffects ? super.fastParseOn(buffer, position) :
-        delegate.fastParseOn(buffer, position);
+    // Whether the action may run on the fast path is defined once by
+    // runsOnFastPath() below. A side-effecting action must keep executing even
+    // when only success/position is queried, so the fast path falls back to
+    // the slow (allocating) mode; a pure action is skipped and only the
+    // delegate's transition is evaluated, allocating nothing.
+    return runsOnFastPath()
+        ? delegate.fastParseOn(buffer, position)
+        : super.fastParseOn(buffer, position);
+  }
+
+  /**
+   * Single decision for whether the action itself is evaluated on the
+   * allocation-free fast path. Pure actions are elided; actions declared with
+   * side effects force the slow path so that the effect is not lost.
+   */
+  boolean runsOnFastPath() {
+    return !hasSideEffects;
+  }
+
+  @SuppressWarnings("unchecked")
+  private R applyAction(Object value) {
+    return function.apply((T) value);
   }
 
   @Override

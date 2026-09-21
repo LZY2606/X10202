@@ -9,7 +9,7 @@ import java.util.Objects;
 /**
  * A parser that optionally parsers its delegate, or answers nil.
  */
-public class OptionalParser extends DelegateParser {
+public class OptionalParser extends PredicateParser {
 
   protected final Object otherwise;
 
@@ -19,19 +19,18 @@ public class OptionalParser extends DelegateParser {
   }
 
   @Override
-  public Result parseOn(Context context) {
-    Result result = delegate.parseOn(context);
-    if (result.isSuccess()) {
-      return result;
-    } else {
-      return context.success(otherwise);
-    }
+  boolean succeedsWhenDelegate(boolean delegateSucceeds) {
+    return true;
   }
 
   @Override
-  public int fastParseOn(String buffer, int position) {
-    int result = delegate.fastParseOn(buffer, position);
-    return result < 0 ? position : result;
+  int nextPosition(int position, int outcome, boolean delegateSucceeds) {
+    return delegateSucceeds ? outcome : position;
+  }
+
+  @Override
+  Result successResult(Context context, Result result) {
+    return result.isSuccess() ? result : context.success(otherwise);
   }
 
   @Override

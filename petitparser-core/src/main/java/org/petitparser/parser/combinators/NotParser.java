@@ -10,7 +10,7 @@ import java.util.Objects;
  * The not-predicate, a parser that succeeds whenever its delegate does not, but
  * consumes no input [Parr 1994, 1995].
  */
-public class NotParser extends DelegateParser {
+public class NotParser extends PredicateParser {
 
   protected final String message;
 
@@ -20,19 +20,18 @@ public class NotParser extends DelegateParser {
   }
 
   @Override
-  public Result parseOn(Context context) {
-    Result result = delegate.parseOn(context);
-    if (result.isFailure()) {
-      return context.success(null);
-    } else {
-      return context.failure(message);
-    }
+  boolean succeedsWhenDelegate(boolean delegateSucceeds) {
+    return !delegateSucceeds;
   }
 
   @Override
-  public int fastParseOn(String buffer, int position) {
-    int result = delegate.fastParseOn(buffer, position);
-    return result < 0 ? position : -1;
+  Result successResult(Context context, Result result) {
+    return context.success(null);
+  }
+
+  @Override
+  String failureMessage() {
+    return message;
   }
 
   @Override

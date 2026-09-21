@@ -22,7 +22,7 @@ public class LazyRepeatingParser extends LimitedRepeatingParser {
   public Result parseOn(Context context) {
     Context current = context;
     List<Object> elements = new ArrayList<>();
-    while (elements.size() < min) {
+    while (needsMandatoryRepetition(elements.size())) {
       Result result = delegate.parseOn(current);
       if (result.isFailure()) {
         return result;
@@ -34,47 +34,44 @@ public class LazyRepeatingParser extends LimitedRepeatingParser {
       Result limiter = limit.parseOn(current);
       if (limiter.isSuccess()) {
         return current.success(elements);
-      } else {
-        if (max != UNBOUNDED && elements.size() >= max) {
-          return limiter;
-        }
-        Result result = delegate.parseOn(current);
-        if (result.isFailure()) {
-          return limiter;
-        }
-        elements.add(result.get());
-        current = result;
       }
+      if (!allowsOptionalRepetition(elements.size())) {
+        return limiter;
+      }
+      Result result = delegate.parseOn(current);
+      if (result.isFailure()) {
+        return limiter;
+      }
+      elements.add(result.get());
+      current = result;
     }
   }
 
   @Override
   public int fastParseOn(String buffer, int position) {
     int count = 0;
-    int current = position;
-    while (count < min) {
-      int result = delegate.fastParseOn(buffer, current);
-      if (result < 0) {
+    while (needsMandatoryRepetition(count)) {
+      int next = delegate.fastParseOn(buffer, position);
+      if (next < 0) {
         return -1;
       }
-      current = result;
+      position = next;
       count++;
     }
     while (true) {
-      int limiter = limit.fastParseOn(buffer, current);
-      if (limiter >= 0) {
-        return current;
-      } else {
-        if (max != UNBOUNDED && count >= max) {
-          return -1;
-        }
-        int result = delegate.fastParseOn(buffer, current);
-        if (result < 0) {
-          return -1;
-        }
-        current = result;
-        count++;
+      // Test the limit at the earliest possible position.
+      if (limit.fastParseOn(buffer, position) >= 0) {
+        return position;
       }
+      if (!allowsOptionalRepetition(count)) {
+        return -1;
+      }
+      int next = delegate.fastParseOn(buffer, position);
+      if (next < 0) {
+        return -1;
+      }
+      position = next;
+      count++;
     }
   }
 

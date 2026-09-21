@@ -8,6 +8,12 @@ import java.util.Objects;
 /**
  * An abstract parser that repeatedly parses between 'min' and 'max' instances
  * of its delegate.
+ *
+ * <p>The repetition boundaries are defined once here as pure integer
+ * predicates and shared by the slow {@code parseOn} and the allocation-free
+ * {@code fastParseOn} transitions of the concrete subclasses, so that the two
+ * paths cannot drift on when the mandatory phase ends or when the optional
+ * phase is exhausted.
  */
 public abstract class RepeatingParser extends DelegateParser {
 
@@ -28,6 +34,23 @@ public abstract class RepeatingParser extends DelegateParser {
       throw new IllegalArgumentException(
           "Invalid max repetitions: " + getRange());
     }
+  }
+
+  /**
+   * Whether another mandatory repetition is required ({@code count < min}).
+   * A delegate failure during this phase fails the whole parser.
+   */
+  protected final boolean needsMandatoryRepetition(int count) {
+    return count < min;
+  }
+
+  /**
+   * Whether another optional repetition is allowed ({@code count < max}, with
+   * {@link #UNBOUNDED} unlimited). A delegate failure during this phase ends a
+   * successful repetition.
+   */
+  protected final boolean allowsOptionalRepetition(int count) {
+    return max == UNBOUNDED || count < max;
   }
 
   @Override

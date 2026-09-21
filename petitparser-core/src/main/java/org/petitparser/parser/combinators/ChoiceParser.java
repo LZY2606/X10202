@@ -33,8 +33,8 @@ public class ChoiceParser extends ListParser {
     for (Parser parser : parsers) {
       Result result = parser.parseOn(context);
       if (result.isFailure()) {
-        failure = failure == null ? (Failure) result :
-            failureJoiner.apply(failure, (Failure) result);
+        failure = failure == null ? (Failure) result
+            : failureJoiner.apply(failure, (Failure) result);
       } else {
         return result;
       }
@@ -44,14 +44,17 @@ public class ChoiceParser extends ListParser {
 
   @Override
   public int fastParseOn(String buffer, int position) {
-    int result = -1;
+    // Every alternative is tried at the unchanged entry position, i.e. the
+    // ordered choice fully rolls back; the first non-negative transition
+    // wins. This is the same ordered traversal and rollback rule as parseOn,
+    // expressed on the integer transition with no Result/Failure allocation.
     for (Parser parser : parsers) {
-      result = parser.fastParseOn(buffer, position);
-      if (result >= 0) {
-        return result;
+      int next = parser.fastParseOn(buffer, position);
+      if (next >= 0) {
+        return next;
       }
     }
-    return result;
+    return -1;
   }
 
   @Override
