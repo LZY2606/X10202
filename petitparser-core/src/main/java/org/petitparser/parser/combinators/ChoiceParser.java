@@ -10,10 +10,51 @@ import java.util.Arrays;
 
 /**
  * A parser that uses the first parser that succeeds.
+ *
+ * <p>The ordered-choice transfer semantics &mdash; try every child from the
+ * same starting position, return the first success, otherwise combine the
+ * collected failures &mdash; is shared between {@link #parseOn(Context)} and
+ * {@link #fastParseOn(String, int)} through the {@link ChoiceCursor}
+ * strategies. The fast cursor is a stateless constant and only moves plain
+ * integers, so the hot path performs no extra allocations.
  */
 public class ChoiceParser extends ListParser {
 
   protected final FailureJoiner failureJoiner;
+
+  /** Allocation-free ordered choice over position transitions. */
+  private abstract static class FastCursor {
+    /**
+     * @return the resulting position or {@link Parser#FAST_PARSE_FAILURE}.
+     */
+    abstract int next(Parser parser, String buffer, int position);
+  }
+
+  private static final FastCursor FAST_CURSOR = new FastCursor() {
+    @Override
+    int next(Parser parser, String buffer, int position) {
+      int result = parser.fastParseOn(buffer, position);
+      return result < 0 ? FAST_PARSE_FAILURE : result;
+    }
+  };
+
+  /** Slow-path state that plays the same role as the fast cursor. */
+  private final class SlowCursor {
+    Failure failure;
+
+    boolean next(Parser parser, Context context) {
+      Result result = parser.parseOn(context);
+      if (result.isFailure()) {
+        failure = failure == null ? (Failure) result
+            : failureJoiner.apply(failure, (Failure) result);
+        return false;
+      }
+      success = result;
+      return true;
+    }
+
+    Result success;
+  }
 
   public ChoiceParser(Parser... parsers) {
     this(new FailureJoiner.SelectLast(), parsers);
@@ -27,31 +68,36 @@ public class ChoiceParser extends ListParser {
     }
   }
 
-  @Override
-  public Result parseOn(Context context) {
-    Failure failure = null;
+  /** Fast ordered-choice loop: children are always retried at {@code start}. */
+  private int runFast(String buffer, int start) {
     for (Parser parser : parsers) {
-      Result result = parser.parseOn(context);
-      if (result.isFailure()) {
-        failure = failure == null ? (Failure) result :
-            failureJoiner.apply(failure, (Failure) result);
-      } else {
-        return result;
-      }
-    }
-    return failure;
-  }
-
-  @Override
-  public int fastParseOn(String buffer, int position) {
-    int result = -1;
-    for (Parser parser : parsers) {
-      result = parser.fastParseOn(buffer, position);
+      int result = FAST_CURSOR.next(parser, buffer, start);
       if (result >= 0) {
         return result;
       }
     }
-    return result;
+    return FAST_PARSE_FAILURE;
+  }
+
+  /** Slow ordered-choice loop: same retry and first-success rule. */
+  private Result runSlow(Context context) {
+    SlowCursor cursor = new SlowCursor();
+    for (Parser parser : parsers) {
+      if (cursor.next(parser, context)) {
+        return cursor.success;
+      }
+    }
+    return cursor.failure;
+  }
+
+  @Override
+  public Result parseOn(Context context) {
+    return runSlow(context);
+  }
+
+  @Override
+  public int fastParseOn(String buffer, int position) {
+    return runFast(buffer, position);
   }
 
   @Override

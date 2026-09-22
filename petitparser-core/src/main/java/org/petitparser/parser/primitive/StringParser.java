@@ -72,7 +72,8 @@ public class StringParser extends Parser {
   public int fastParseOn(String buffer, int position) {
     int stop = position + size;
     return stop <= buffer.length() &&
-        predicate.test(buffer.substring(position, stop)) ? stop : -1;
+        predicate.test(buffer.substring(position, stop))
+        ? stop : FAST_PARSE_FAILURE;
   }
 
   @Override

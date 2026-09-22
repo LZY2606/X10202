@@ -27,7 +27,7 @@ public class AndParser extends DelegateParser {
   @Override
   public int fastParseOn(String buffer, int position) {
     int result = delegate.fastParseOn(buffer, position);
-    return result < 0 ? -1 : position;
+    return result < 0 ? FAST_PARSE_FAILURE : position;
   }
 
   @Override

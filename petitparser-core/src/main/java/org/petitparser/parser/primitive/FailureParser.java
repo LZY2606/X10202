@@ -32,7 +32,7 @@ public class FailureParser extends Parser {
 
   @Override
   public int fastParseOn(String buffer, int position) {
-    return -1;
+    return FAST_PARSE_FAILURE;
   }
 
   @Override

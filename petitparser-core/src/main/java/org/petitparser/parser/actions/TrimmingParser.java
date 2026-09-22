@@ -49,7 +49,7 @@ public class TrimmingParser extends DelegateParser {
   @Override
   public int fastParseOn(String buffer, int position) {
     int result = delegate.fastParseOn(buffer, consume(left, buffer, position));
-    return result < 0 ? result : consume(right, buffer, result);
+    return result < 0 ? FAST_PARSE_FAILURE : consume(right, buffer, result);
   }
 
   private int consume(Parser parser, String buffer, int position) {

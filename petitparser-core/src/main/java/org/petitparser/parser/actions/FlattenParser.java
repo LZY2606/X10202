@@ -7,6 +7,14 @@ import org.petitparser.parser.combinators.DelegateParser;
 
 /**
  * A parser that answers a flat copy of the range my delegate parses.
+ *
+ * <p>Both entry points share the same transfer: on success the consumed range
+ * is from the starting position to the delegate's resulting position. The
+ * slow path additionally materializes that range as a {@link String}; with a
+ * custom {@code message} a delegate failure is reported at the starting
+ * position instead of the delegate's failure position. The fast path only
+ * forwards the delegate's position transition and therefore allocates
+ * nothing.
  */
 public class FlattenParser extends DelegateParser {
 
@@ -43,6 +51,12 @@ public class FlattenParser extends DelegateParser {
           context.getBuffer().substring(context.getPosition(), position);
       return context.success(output, position);
     }
+  }
+
+  @Override
+  public int fastParseOn(String buffer, int position) {
+    int result = delegate.fastParseOn(buffer, position);
+    return result < 0 ? FAST_PARSE_FAILURE : result;
   }
 
   @Override

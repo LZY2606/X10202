@@ -15,4 +15,25 @@
     <name>PetitParser Core</name>
     <description>PetitParser library</description>
 
+    <build>
+        <plugins>
+            <!--
+              The allocation baseline test reads the JVM thread-allocation
+              counters through reflection; open the management modules to the
+              test run only (the production module descriptor is unchanged).
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <argLine>
+                        --add-reads petitparser.core=java.management
+                        --add-reads petitparser.core=jdk.management
+                        --add-opens jdk.management/com.sun.management.internal=petitparser.core
+                    </argLine>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
 </project>

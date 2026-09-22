@@ -193,7 +193,7 @@ public class CharacterParser extends Parser {
   @Override
   public int fastParseOn(String buffer, int position) {
     return position < buffer.length() && matcher.test(buffer.charAt(position)) ?
-        position + 1 : -1;
+        position + 1 : FAST_PARSE_FAILURE;
   }
 
   @Override

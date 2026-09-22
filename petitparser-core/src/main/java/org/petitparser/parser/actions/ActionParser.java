@@ -44,9 +44,13 @@ public class ActionParser<T, R> extends DelegateParser {
 
   @Override
   public int fastParseOn(String buffer, int position) {
-    // If we know to have side-effects, we have to fall back to the slow mode.
-    return hasSideEffects ? super.fastParseOn(buffer, position) :
-        delegate.fastParseOn(buffer, position);
+    // A side-effecting action must run exactly as on the slow path, so fall
+    // back to parseOn; a pure action cannot influence the transfer, so the
+    // delegate's position-only transition is sufficient and allocates
+    // nothing.
+    return hasSideEffects
+        ? super.fastParseOn(buffer, position)
+        : delegate.fastParseOn(buffer, position);
   }
 
   @Override

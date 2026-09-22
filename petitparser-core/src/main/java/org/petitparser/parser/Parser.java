@@ -39,6 +39,17 @@ import static org.petitparser.parser.primitive.CharacterParser.any;
 public abstract class Parser {
 
   /**
+   * Internal transition code returned by the position-only transfer of
+   * {@link #fastParseOn(String, int)} when a child parser fails.
+   *
+   * <p>This is the single shared marker used by every combinator's fast path,
+   * so that the success/failure convention of the position-only transition is
+   * defined in exactly one place instead of being re-discovered (and risk
+   * drifting) in every parser.
+   */
+  protected static final int FAST_PARSE_FAILURE = -1;
+
+  /**
    * Primitive method doing the actual parsing.
    *
    * <p>The method is overridden in concrete subclasses to implement the parser
@@ -66,7 +77,7 @@ public abstract class Parser {
    */
   public int fastParseOn(String buffer, int position) {
     Result result = parseOn(new Context(buffer, position));
-    return result.isSuccess() ? result.getPosition() : -1;
+    return result.isSuccess() ? result.getPosition() : FAST_PARSE_FAILURE;
   }
 
   /**

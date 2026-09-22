@@ -25,7 +25,7 @@ public class EndOfInputParser extends Parser {
 
   @Override
   public int fastParseOn(String buffer, int position) {
-    return position < buffer.length() ? -1 : position;
+    return position < buffer.length() ? FAST_PARSE_FAILURE : position;
   }
 
   @Override

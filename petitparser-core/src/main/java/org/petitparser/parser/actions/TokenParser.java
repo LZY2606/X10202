@@ -29,7 +29,8 @@ public class TokenParser extends DelegateParser {
 
   @Override
   public int fastParseOn(String buffer, int position) {
-    return delegate.fastParseOn(buffer, position);
+    int result = delegate.fastParseOn(buffer, position);
+    return result < 0 ? FAST_PARSE_FAILURE : result;
   }
 
   @Override
